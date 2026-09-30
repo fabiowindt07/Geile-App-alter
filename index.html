@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f5f0">
+<link rel="manifest" href="manifest.json">
+<title>Mein Repertoire</title>
+<style>
+:root{--bg:#f7f5f0;--card:#fff;--text:#202020;--muted:#777;--line:#e7e3dc;--green:#39a96b;--yellow:#e5a72d;--red:#db5b58}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:22px 18px 10px;position:sticky;top:0;background:rgba(247,245,240,.96);backdrop-filter:blur(8px);z-index:2}
+h1{margin:0;font-size:28px}.sub{color:var(--muted);font-size:14px;margin-top:3px}
+main{padding:8px 16px 90px;max-width:720px;margin:auto}
+.toolbar{display:flex;gap:8px;margin:10px 0 14px}.toolbar select,.toolbar button,.form input,.form select{border:1px solid var(--line);background:white;border-radius:12px;padding:11px;font-size:15px}
+.toolbar select{flex:1}.toolbar button{font-size:20px;width:48px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:15px;margin:10px 0;display:flex;gap:12px;align-items:center;box-shadow:0 1px 2px #00000008}
+.dot{width:11px;height:11px;border-radius:50%;flex:none}.info{flex:1;min-width:0}.title{font-weight:700;font-size:17px}.composer{color:var(--muted);font-size:13px;margin-top:2px}
+.metrics{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.pill{font-size:12px;background:#f2f0eb;padding:5px 8px;border-radius:8px}
+.need{font-weight:800;font-size:13px}.empty{text-align:center;color:var(--muted);padding:55px 20px}
+dialog{border:0;border-radius:22px;padding:0;width:min(92%,520px);box-shadow:0 20px 70px #0005}.dialog{padding:20px}.dialog h2{margin-top:0}.form{display:grid;gap:12px}.form label{font-size:13px;color:var(--muted)}.form input,.form select{width:100%}.range{display:grid;grid-template-columns:1fr 45px;align-items:center;gap:10px}.range output{text-align:center;font-weight:700}.actions{display:flex;gap:8px;margin-top:18px}.actions button{flex:1;border:0;border-radius:12px;padding:12px;font-weight:700}.primary{background:#202020;color:#fff}.secondary{background:#eeeae3}
+.detail{font-size:14px;color:var(--muted);line-height:1.45}.danger{color:#b33;border:0;background:none}
+</style>
+</head>
+<body>
+<header><h1>Mein Repertoire</h1><div class="sub" id="summary"></div></header>
+<main>
+<div class="toolbar"><select id="sort"><option value="need">Wiederholungsbedarf</option><option value="title">Titel A–Z</option><option value="composer">Komponist</option><option value="recent">Zuletzt gespielt</option></select><button id="add">＋</button></div>
+<section id="list"></section>
+</main>
+<dialog id="dlg"><div class="dialog">
+<h2 id="dlgTitle">Stück hinzufügen</h2>
+<form class="form" id="form">
+<input type="hidden" id="editId">
+<div><label>Titel</label><input id="title" required placeholder="z. B. Ballade Nr. 1"></div>
+<div><label>Komponist</label><input id="composer" placeholder="z. B. Chopin"></div>
+<div><label>Beherrschung</label><div class="range"><input id="mastery" type="range" min="1" max="10" value="5"><output id="masteryOut">5/10</output></div></div>
+<div><label>Sicherheit</label><div class="range"><input id="confidence" type="range" min="1" max="10" value="5"><output id="confidenceOut">5/10</output></div></div>
+<div><label>Wiederholen nach</label><select id="interval"><option value="1">1 Tag</option><option value="3">3 Tagen</option><option value="7" selected>7 Tagen</option><option value="14">14 Tagen</option><option value="30">30 Tagen</option><option value="60">60 Tagen</option></select></div>
+<div><label>Zuletzt gespielt</label><input id="lastPlayed" type="date"></div>
+<div><label>Notiz</label><input id="note" placeholder="z. B. Takt 180 noch unsicher"></div>
+<div class="actions"><button type="button" class="secondary" id="cancel">Abbrechen</button><button class="primary">Speichern</button></div>
+</form>
+<div id="editActions" style="display:none;margin-top:8px"><button class="danger" id="delete">Stück löschen</button></div>
+</div></dialog>
+<script>
+const KEY="repertoire-v1";
+let pieces=JSON.parse(localStorage.getItem(KEY)||"[]");
+const $=id=>document.getElementById(id);
+const today=()=>new Date().toISOString().slice(0,10);
+function daysSince(d){return Math.max(0,Math.floor((Date.now()-new Date(d+"T00:00:00"))/86400000))}
+function need(p){
+  const due=Math.min(10,Math.round(daysSince(p.lastPlayed)*10/p.interval));
+  return Math.round((due+(10-p.mastery)+(10-p.confidence))/3);
+}
+function color(n){return n>=7?"var(--red)":n>=4?"var(--yellow)":"var(--green)"}
+function label(n){return n>=7?"Üben":n>=4?"Auffrischen":"Stabil"}
+function save(){localStorage.setItem(KEY,JSON.stringify(pieces))}
+function render(){
+  const sort=$("sort").value;
+  let a=[...pieces];
+  if(sort==="need")a.sort((x,y)=>need(y)-need(x));
+  if(sort==="title")a.sort((x,y)=>x.title.localeCompare(y.title));
+  if(sort==="composer")a.sort((x,y)=>(x.composer||"").localeCompare(y.composer||""));
+  if(sort==="recent")a.sort((x,y)=>new Date(y.lastPlayed)-new Date(x.lastPlayed));
+  const urgent=a.filter(p=>need(p)>=7).length, refresh=a.filter(p=>need(p)>=4&&need(p)<7).length;
+  $("summary").textContent=`${pieces.length} Stücke · 🔴 ${urgent} üben · 🟡 ${refresh} auffrischen · 🟢 ${pieces.length-urgent-refresh} stabil`;
+  $("list").innerHTML=a.length?a.map(p=>{let n=need(p);return `<article class="card" data-id="${p.id}">
+    <span class="dot" style="background:${color(n)}"></span><div class="info"><div class="title">${esc(p.title)}</div><div class="composer">${esc(p.composer||"Komponist unbekannt")}</div>
+    <div class="metrics"><span class="pill">Beherrschung ${p.mastery}/10</span><span class="pill">Sicherheit ${p.confidence}/10</span><span class="pill">vor ${daysSince(p.lastPlayed)} T.</span></div></div>
+    <div class="need" style="color:${color(n)}">${label(n)}<br>${n}/10</div></article>`}).join(""):`<div class="empty">Noch keine Stücke.<br>Tippe auf ＋ und füge dein erstes Stück hinzu.</div>`;
+  document.querySelectorAll(".card").forEach(c=>c.onclick=()=>openEdit(c.dataset.id));
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function openNew(){fill(null);$("dlg").showModal()}
+function fill(p){
+ $("dlgTitle").textContent=p?"Stück bearbeiten":"Stück hinzufügen"; $("editId").value=p?.id||"";
+ $("title").value=p?.title||"";$("composer").value=p?.composer||"";
+ $("mastery").value=p?.mastery||5;$("confidence").value=p?.confidence||5;
+ $("interval").value=p?.interval||7;$("lastPlayed").value=p?.lastPlayed||today();$("note").value=p?.note||"";
+ $("editActions").style.display=p?"block":"none";updateOut();
+}
+function openEdit(id){fill(pieces.find(p=>p.id===id));$("dlg").showModal()}
+function updateOut(){$("masteryOut").value=$("mastery").value+"/10";$("confidenceOut").value=$("confidence").value+"/10"}
+$("mastery").oninput=updateOut;$("confidence").oninput=updateOut;
+$("add").onclick=openNew;$("cancel").onclick=()=>$("dlg").close();$("sort").onchange=render;
+$("form").onsubmit=e=>{e.preventDefault();const id=$("editId").value||crypto.randomUUID();const p={id,title:$("title").value.trim(),composer:$("composer").value.trim(),mastery:+$("mastery").value,confidence:+$("confidence").value,interval:+$("interval").value,lastPlayed:$("lastPlayed").value||today(),note:$("note").value.trim()};const i=pieces.findIndex(x=>x.id===id);if(i<0)pieces.push(p);else pieces[i]=p;save();render();$("dlg").close()};
+$("delete").onclick=()=>{const id=$("editId").value;if(id&&confirm("Stück wirklich löschen?")){pieces=pieces.filter(p=>p.id!==id);save();render();$("dlg").close()}};
+if(!pieces.length){pieces=[{id:crypto.randomUUID(),title:"Beispiel: Ballade Nr. 1",composer:"Frédéric Chopin",mastery:8,confidence:7,interval:7,lastPlayed:today(),note:""}];save()}
+render();
+</script>
+</body></html>
